@@ -1,0 +1,32 @@
+{
+  "name": "@neartrade/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the neartrade developer API: quotes, swaps and token discovery for every NEAR launchpad and Rhea pool, paid in NEAR or USDC.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "peerDependencies": { "near-api-js": ">=5" },
+  "peerDependenciesMeta": { "near-api-js": { "optional": true } },
+  "devDependencies": {
+    "near-api-js": "7.3.1",
+    "tsup": "8.3.5",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "@types/node": "22.10.1"
+  },
+  "keywords": ["near", "neartrade", "swap", "dex", "launchpad", "rhea", "sdk", "trading"],
+  "homepage": "https://dev.neartrade.lol"
+}
