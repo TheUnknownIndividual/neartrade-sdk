@@ -16,9 +16,13 @@ export interface NearTradeOptions {
   fetch?: typeof fetch;
 }
 
-/** An API error: the HTTP status, the API's code (e.g. "quote_expired", "no_quote") and what to do. */
+/**
+ * An API error: the HTTP status, the API's code (e.g. "quote_expired", "no_quote") and what to do. `details` holds any
+ * other fields of the answer, such as a deposit's `minimumUsd` (NEAR Intents' minimum for that chain) on
+ * "no_bridge_quote".
+ */
 export class NearTradeError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(readonly status: number, readonly code: string, message: string, readonly details: Record<string, unknown> = {}) {
     super(message);
     this.name = "NearTradeError";
   }
@@ -80,7 +84,10 @@ export class NearTrade {
         signal: controller.signal,
       });
       const data = (await response.json().catch(() => null)) as (T & { error?: string; message?: string }) | null;
-      if (!response.ok || !data) throw new NearTradeError(response.status, data?.error ?? "http_error", data?.message ?? `HTTP ${response.status}`);
+      if (!response.ok || !data) {
+        const { error: code, message, ...details } = (data ?? {}) as { error?: string; message?: string } & Record<string, unknown>;
+        throw new NearTradeError(response.status, code ?? "http_error", message ?? `HTTP ${response.status}`, details);
+      }
       return data;
     } catch (error) {
       if (error instanceof NearTradeError) throw error;

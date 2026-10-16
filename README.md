@@ -21,7 +21,7 @@ Get a key at https://dev.neartrade.lol (it takes a few seconds). For partner acc
 import { NearTrade } from "@neartradelol/sdk";
 const nt = new NearTrade({ apiKey: process.env.NEARTRADE_KEY! });
 
-// 1. A NEAR account, made locally: no transaction, no fee. Store secretKey as you store keys.
+// 1. A NEAR account, made locally: no transaction, no fee (or make the key yourself, see "Security" below).
 const user = await NearTrade.newAccount();   // { accountId: 64 hex, publicKey, secretKey }
 
 // 2. A deposit address on the user's chain. receive "near" (default) arrives as native NEAR and creates the account.
@@ -37,6 +37,25 @@ await nt.signAndSend(quote, { signer: user });
 // Cash out: NEAR (or USDC) to an address on any chain, signed and sent here.
 await nt.withdrawAndSend({ account: user.accountId, chain: "sol", asset: "USDC", to: "UserSolanaAddress", amount: NearTrade.near(2), from: "near" }, { signer: user });
 ```
+
+### Security: make the key with NEAR's official call
+
+The key controls your user's funds, so we recommend generating it in code you control with NEAR's official library, or inside your HSM or MPC service, rather than with any third party's helper, ours included. `NearTrade.newAccount()` runs exactly these lines in your process; the key is never sent anywhere, and the API never asks for one.
+
+```ts
+import { KeyPair } from "near-api-js";
+const keyPair = KeyPair.fromRandom("ed25519");
+const user = {
+  accountId: Buffer.from(keyPair.getPublicKey().data).toString("hex"), // the implicit account (64 hex)
+  secretKey: keyPair.toString(),                                       // keep it in your KMS / HSM / vault
+};
+```
+
+To keep keys inside your custody service, pass `{ accountId, publicKey, sign: (hash) => ... }` as the signer instead.
+
+### Minimums and timing
+
+NEAR Intents sets a minimum per chain and can change it at any time, including temporary limits; neartrade adds none. On 17 Oct 2026: Ethereum, Base, Arbitrum and Solana took a few dollars, Tron $100 and BNB Chain $1,000 (temporary limits), Bitcoin 8,300 sats. Under the minimum, `deposit()` throws `no_bridge_quote` with `error.details.minimumUsd` (or `minimumUnits`). Funds arrive about 20 to 60 seconds after the source chain confirms (`etaSeconds`).
 
 `nt.bridgeAssets()` lists every chain and asset. The answers state what the user sends, what arrives (`expectedOut`, `minOut`) and the bridge fee (`feeBps`) before anything moves; a deposit that cannot be delivered goes back to `refundTo`.
 
@@ -94,7 +113,7 @@ const { prices } = await nt.prices(["token.rhealab.near", "trade-2.nearlytrade.n
 
 ## Errors
 
-Every API error is a `NearTradeError` with `status`, `code` and a message that says what to do:
+Every API error is a `NearTradeError` with `status`, `code`, a message that says what to do, and `details` (other fields, such as `minimumUsd`):
 `key_required`, `scope_required`, `no_bridge_quote`, `insufficient`, `bad_asset`, `bad_refund`, `bad_recipient`, `unknown_account`, `unknown_transfer`, `rate_limited`, `bad_account`, `bad_token`, `bad_side`, `bad_amount`, `bad_slippage`, `bad_quote_asset`, `no_quote`, `no_usdc_route`, `quote_unavailable`, `quote_expired`, `not_your_quote`, `incomplete`, `undecodable`, `changed`.
 
 ## Rules
@@ -103,4 +122,9 @@ Every API error is a `NearTradeError` with `status`, `code` and a message that s
 - Keep the API key on a server.
 - Discovery data is for showing tokens to people who trade them through neartrade, not for resale.
 
-Full reference: https://dev.neartrade.lol (OpenAPI 3.1: https://dev.neartrade.lol/openapi.json)
+## Enterprise and high-volume integrations
+
+Platforms bringing users onto NEAR at scale can agree terms with us directly: volume-based fee arrangements, dedicated rate limits, a partner fee share paid on chain, and integration support. Write to dev@neartrade.lol.
+
+Full SDK reference (every method, type and error): https://dev.neartrade.lol/sdk
+API guide: https://dev.neartrade.lol · OpenAPI 3.1: https://dev.neartrade.lol/openapi.json

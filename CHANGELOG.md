@@ -8,6 +8,7 @@
   `waitForTransfer`, `submitTransfer`, `bridgeAssets`.
 - `NearTrade.newAccount()`: a NEAR implicit account made locally, with no transaction and no fee.
 - `account`: NEAR, every token with USD values, the total, and `canTrade`.
+- `NearTradeError.details`: the answer's other fields (a deposit's `minimumUsd` / `minimumUnits` on `no_bridge_quote`).
 
 ## 0.2.0 (2026-10-16)
 
