@@ -30,7 +30,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx test/*.test.ts"
+    "test": "node --test --import tsx test/*.test.ts",
+    "test:live": "tsx test/live.ts"
   },
   "peerDependencies": {
     "near-api-js": ">=5"
