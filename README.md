@@ -4,6 +4,7 @@ Every NEAR launchpad and Rhea pool through one integration. Quote a buy or a sel
 
 - **Every venue neartrade trades on:** Rhea (classic and DCL pools) and the launchpads' bonding curves: nearly.trade, Meme Cooking, gra.fun, AIdols, Nira, Shards, Nearrr, Umbra, plus Intear's DEX and routr. When a token graduates from its curve, the same call routes to its pool.
 - **NEAR or USDC:** pay for a buy in USDC, or take a sell's proceeds in USDC (`quoteAsset: "usdc"`). The conversion is part of the same quote and carries no fee of its own.
+- **Users from any chain:** a user with nothing on NEAR gets an account in one call (`NearTrade.newAccount()`, no transaction) and funds it from Ethereum, Base, Arbitrum, BNB Chain, Solana, Tron, TON, Bitcoin and more through NEAR Intents. The first deposit arrives as NEAR, so it pays its own gas. Cash out goes back the same way.
 - **Non-custodial:** neartrade never holds keys or funds. You get transactions; your user's key signs them.
 - **Free to use:** no subscription. neartrade takes 1% of each swap, already inside the transactions a quote returns. Partner keys are paid an agreed share of that fee on every swap they route, on chain, in the same transaction.
 - **Token discovery (partner keys):** trending, new and graduating tokens, search, each token's market and safety facts (Rug %, bundle and developer checks), prices and launchpads.
@@ -13,6 +14,31 @@ npm i @neartradelol/sdk near-api-js   # near-api-js only for signing with a key 
 ```
 
 Get a key at https://dev.neartrade.lol (it takes a few seconds). For partner access (discovery and a fee share), write to https://help.neartrade.lol.
+
+## Onboard a user from any chain
+
+```ts
+import { NearTrade } from "@neartradelol/sdk";
+const nt = new NearTrade({ apiKey: process.env.NEARTRADE_KEY! });
+
+// 1. A NEAR account, made locally: no transaction, no fee. Store secretKey as you store keys.
+const user = await NearTrade.newAccount();   // { accountId: 64 hex, publicKey, secretKey }
+
+// 2. A deposit address on the user's chain. receive "near" (default) arrives as native NEAR and creates the account.
+const dep = await nt.deposit({ account: user.accountId, chain: "base", asset: "USDC", amount: NearTrade.units(20, 6), refundTo: "0xUserBaseAddress" });
+// the user (or your wallet) sends exactly dep.amountIn of USDC on Base to dep.depositAddress before dep.deadline
+
+// 3. Wait for it, check the balance, trade.
+await nt.waitForTransfer(dep.depositAddress, { onStatus: (s) => console.log(s.status) });
+const { canTrade, totalUsd } = await nt.account(user.accountId);
+const quote = await nt.quote({ account: user.accountId, token: "token.rhealab.near", side: "buy", amount: NearTrade.near(1) });
+await nt.signAndSend(quote, { signer: user });
+
+// Cash out: NEAR (or USDC) to an address on any chain, signed and sent here.
+await nt.withdrawAndSend({ account: user.accountId, chain: "sol", asset: "USDC", to: "UserSolanaAddress", amount: NearTrade.near(2), from: "near" }, { signer: user });
+```
+
+`nt.bridgeAssets()` lists every chain and asset. The answers state what the user sends, what arrives (`expectedOut`, `minOut`) and the bridge fee (`feeBps`) before anything moves; a deposit that cannot be delivered goes back to `refundTo`.
 
 ## Buy in a browser or mobile wallet
 
@@ -69,7 +95,7 @@ const { prices } = await nt.prices(["token.rhealab.near", "trade-2.nearlytrade.n
 ## Errors
 
 Every API error is a `NearTradeError` with `status`, `code` and a message that says what to do:
-`key_required`, `scope_required`, `rate_limited`, `bad_account`, `bad_token`, `bad_side`, `bad_amount`, `bad_slippage`, `bad_quote_asset`, `no_quote`, `no_usdc_route`, `quote_unavailable`, `quote_expired`, `not_your_quote`, `incomplete`, `undecodable`, `changed`.
+`key_required`, `scope_required`, `no_bridge_quote`, `insufficient`, `bad_asset`, `bad_refund`, `bad_recipient`, `unknown_account`, `unknown_transfer`, `rate_limited`, `bad_account`, `bad_token`, `bad_side`, `bad_amount`, `bad_slippage`, `bad_quote_asset`, `no_quote`, `no_usdc_route`, `quote_unavailable`, `quote_expired`, `not_your_quote`, `incomplete`, `undecodable`, `changed`.
 
 ## Rules
 
@@ -77,4 +103,4 @@ Every API error is a `NearTradeError` with `status`, `code` and a message that s
 - Keep the API key on a server.
 - Discovery data is for showing tokens to people who trade them through neartrade, not for resale.
 
-Full reference: https://dev.neartrade.lol
+Full reference: https://dev.neartrade.lol (OpenAPI 3.1: https://dev.neartrade.lol/openapi.json)

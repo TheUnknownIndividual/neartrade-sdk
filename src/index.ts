@@ -1,4 +1,4 @@
-import type { Candle, Holder, Launchpad, Me, PlainTransaction, Quote, QuoteRequest, SendResult, TokenDetail, TokenList, Token, Trade, TxStatus } from "./types.js";
+import type { AccountSummary, BridgeAssets, Candle, Deposit, DepositRequest, Holder, Launchpad, Me, NewAccount, PlainTransaction, Quote, QuoteRequest, SendResult, TokenDetail, TokenList, Token, Trade, TransferStatus, TxStatus, Withdrawal, WithdrawRequest } from "./types.js";
 
 export * from "./types.js";
 
@@ -145,40 +145,71 @@ export class NearTrade {
   /** The quote's transactions signed, base64, in order (signAndSend without the send). */
   async signQuote(quote: Quote, options: { signer: SignerInput; nodeUrl?: string }): Promise<string[]> {
     if (options.signer.accountId !== quote.account) throw new Error(`the quote is for ${quote.account}, the signer is ${options.signer.accountId}`);
-    const near = (await import("near-api-js").catch(() => null)) as typeof import("near-api-js") | null;
-    if (!near) throw new Error("signAndSend needs near-api-js: npm i near-api-js");
-    const nodeUrl = options.nodeUrl ?? DEFAULT_RPC;
-    let publicKeyText: string;
-    let sign: (hash: Uint8Array) => Promise<Uint8Array>;
-    if ("secretKey" in options.signer) {
-      const keyPair = near.KeyPair.fromString(options.signer.secretKey as Parameters<typeof near.KeyPair.fromString>[0]);
-      publicKeyText = keyPair.getPublicKey().toString();
-      sign = async (hash) => keyPair.sign(hash).signature;
-    } else {
-      publicKeyText = options.signer.publicKey;
-      sign = options.signer.sign;
-    }
-    const publicKey = near.PublicKey.fromString(publicKeyText);
-    const [accessKey, block] = await Promise.all([
-      rpc<{ nonce: number | string }>(nodeUrl, "query", { request_type: "view_access_key", finality: "final", account_id: quote.account, public_key: publicKeyText }),
-      rpc<{ header: { hash: string } }>(nodeUrl, "block", { finality: "final" }),
-    ]);
-    const blockHash = near.baseDecode(block.header.hash);
-    let nonce = BigInt(accessKey.nonce);
-    const out: string[] = [];
-    for (const tx of quote.transactions) {
-      nonce += 1n;
-      const actions = tx.actions.map((action) => action.type === "Transfer"
-        ? near.actions.transfer(BigInt(action.params.deposit))
-        : near.actions.functionCall(action.params.methodName, action.params.args, BigInt(action.params.gas), BigInt(action.params.deposit)));
-      const transaction = near.createTransaction(quote.account, publicKey, tx.receiverId, nonce, actions, blockHash);
-      const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", transaction.encode()));
-      const signature = new near.Signature({ keyType: publicKey.keyType, data: await sign(hash) });
-      const signedTx = new near.SignedTransaction({ transaction, signature });
-      out.push(toBase64(signedTx.encode()));
-    }
-    return out;
+    return signTransactions(quote.account, quote.transactions, options);
   }
+
+  /* ---------------------------------------------------------------- onboarding (NEAR Intents, any chain) */
+
+  /**
+   * A new NEAR account, made locally with no transaction and no fee: an implicit account (its id is the public key in
+   * hex), live as soon as NEAR reaches it, e.g. a deposit() with receive "near". Store secretKey as you store keys.
+   * Needs near-api-js.
+   */
+  static async newAccount(): Promise<NewAccount> {
+    const near = await nearApi();
+    const keyPair = near.KeyPair.fromRandom("ed25519");
+    const publicKey = keyPair.getPublicKey();
+    return { accountId: hex(publicKey.data), publicKey: publicKey.toString(), secretKey: keyPair.toString() };
+  }
+
+  /** Every chain and asset a deposit can come from or a withdrawal go to, and the bridge fee. */
+  bridgeAssets(): Promise<BridgeAssets> { return this.call("GET", "/v1/bridge/assets"); }
+
+  /**
+   * A deposit address on another chain (USDC on Base, SOL, BNB, USDT on Tron, BTC...) that delivers to a NEAR account
+   * through NEAR Intents. With receive "near" (default) the funds arrive as native NEAR, which also creates a new
+   * implicit account and pays its gas. The user sends exactly `amountIn` to `depositAddress` before `deadline`.
+   */
+  deposit(request: DepositRequest): Promise<Deposit> { return this.call("POST", "/v1/deposit", request); }
+
+  /** NEAR or USDC from a NEAR account to an address on any chain: the figures and the transaction to sign. */
+  withdraw(request: WithdrawRequest): Promise<Withdrawal> { return this.call("POST", "/v1/withdraw", request); }
+
+  /** withdraw(), signed with `signer` and broadcast, then reported to NEAR Intents. Returns the withdrawal and the hash. */
+  async withdrawAndSend(request: WithdrawRequest, options: { signer: SignerInput; nodeUrl?: string }): Promise<{ withdrawal: Withdrawal; hash: string }> {
+    if (options.signer.accountId !== request.account) throw new Error(`the withdrawal is from ${request.account}, the signer is ${options.signer.accountId}`);
+    const withdrawal = await this.withdraw(request);
+    const [signed] = await signTransactions(request.account, withdrawal.transactions, options);
+    const outcome = await rpc<{ transaction: { hash: string } }>(options.nodeUrl ?? DEFAULT_RPC, "send_tx", { signed_tx_base64: signed, wait_until: "INCLUDED" });
+    await this.submitTransfer(withdrawal.depositAddress, outcome.transaction.hash).catch(() => undefined);
+    return { withdrawal, hash: outcome.transaction.hash };
+  }
+
+  /** Tells NEAR Intents which transaction sent the funds, so it is picked up at once. */
+  submitTransfer(depositAddress: string, txHash: string): Promise<{ ok: true }> {
+    return this.call("POST", `/v1/transfers/${encodeURIComponent(depositAddress)}/submit`, { txHash });
+  }
+
+  /** Where a deposit or withdrawal is. */
+  transfer(depositAddress: string): Promise<TransferStatus> { return this.call("GET", `/v1/transfers/${encodeURIComponent(depositAddress)}`); }
+
+  /** Asks transfer() until it is done, refunded, failed or incomplete, or `timeoutMs` (default 20 minutes) passed. */
+  async waitForTransfer(depositAddress: string, options: { timeoutMs?: number; intervalMs?: number; onStatus?: (status: TransferStatus) => void } = {}): Promise<TransferStatus> {
+    const deadline = Date.now() + (options.timeoutMs ?? 20 * 60_000);
+    let last: TransferStatus | null = null;
+    while (Date.now() < deadline) {
+      const now = await this.transfer(depositAddress).catch(() => null);
+      if (now && now.status !== last?.status) options.onStatus?.(now);
+      if (now) last = now;
+      if (last && ["done", "refunded", "failed", "incomplete"].includes(last.status)) return last;
+      await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 5_000));
+    }
+    if (!last) throw new NearTradeError(0, "timeout", `No status for ${depositAddress} within the time limit`);
+    return last;
+  }
+
+  /** What a NEAR account holds (NEAR, every token with USD values) and whether it has the NEAR to trade. */
+  account(account: string): Promise<AccountSummary> { return this.call("GET", `/v1/accounts/${encodeURIComponent(account)}`); }
 
   /* ---------------------------------------------------------------- discovery (partner keys) */
 
@@ -236,6 +267,50 @@ export class NearTrade {
     return this.call("GET", `/v1/wallets/${encodeURIComponent(account)}/pnl`);
   }
 }
+
+async function nearApi(): Promise<typeof import("near-api-js")> {
+  const near = (await import("near-api-js").catch(() => null)) as typeof import("near-api-js") | null;
+  if (!near) throw new Error("this needs near-api-js: npm i near-api-js");
+  return near;
+}
+
+/** Signs `transactions` from `account` in order (nonce and block hash read from `nodeUrl`), base64. */
+async function signTransactions(account: string, transactions: PlainTransaction[], options: { signer: SignerInput; nodeUrl?: string }): Promise<string[]> {
+  const near = await nearApi();
+  const nodeUrl = options.nodeUrl ?? DEFAULT_RPC;
+  let publicKeyText: string;
+  let sign: (hash: Uint8Array) => Promise<Uint8Array>;
+  if ("secretKey" in options.signer) {
+    const keyPair = near.KeyPair.fromString(options.signer.secretKey as Parameters<typeof near.KeyPair.fromString>[0]);
+    publicKeyText = keyPair.getPublicKey().toString();
+    sign = async (hash) => keyPair.sign(hash).signature;
+  } else {
+    publicKeyText = options.signer.publicKey;
+    sign = options.signer.sign;
+  }
+  const publicKey = near.PublicKey.fromString(publicKeyText);
+  const [accessKey, block] = await Promise.all([
+    rpc<{ nonce: number | string }>(nodeUrl, "query", { request_type: "view_access_key", finality: "final", account_id: account, public_key: publicKeyText }),
+    rpc<{ header: { hash: string } }>(nodeUrl, "block", { finality: "final" }),
+  ]);
+  const blockHash = near.baseDecode(block.header.hash);
+  let nonce = BigInt(accessKey.nonce);
+  const out: string[] = [];
+  for (const tx of transactions) {
+    nonce += 1n;
+    const actions = tx.actions.map((action) => action.type === "Transfer"
+      ? near.actions.transfer(BigInt(action.params.deposit))
+      : near.actions.functionCall(action.params.methodName, action.params.args, BigInt(action.params.gas), BigInt(action.params.deposit)));
+    const transaction = near.createTransaction(account, publicKey, tx.receiverId, nonce, actions, blockHash);
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", transaction.encode()));
+    const signature = new near.Signature({ keyType: publicKey.keyType, data: await sign(hash) });
+    const signedTx = new near.SignedTransaction({ transaction, signature });
+    out.push(toBase64(signedTx.encode()));
+  }
+  return out;
+}
+
+const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: "neartrade-sdk", method, params }) });

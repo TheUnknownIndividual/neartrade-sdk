@@ -131,3 +131,111 @@ export interface Launchpad { id: string; tokens: number; launched24h: number; la
 export interface Trade { trader: string; side: "buy" | "sell" | string; tokenAmount: string; nearAmount: string; tx: string; at: string | null; pool: string | null }
 export interface Holder { account: string; balance: string; kind: string }
 export interface Candle { time: string; open: number; high: number; low: number; close: number; volume: number }
+
+/* ---------------------------------------------------------------- onboarding (NEAR Intents) */
+
+/** A NEAR account made locally by NearTrade.newAccount(): an implicit account, live once NEAR reaches it. */
+export interface NewAccount { accountId: string; publicKey: string; secretKey: string }
+
+export interface BridgeAsset { asset: string; symbol: string; decimals: number; priceUsd: number | null }
+export interface BridgeAssets {
+  receive: Array<{ side: "near" | "usdc"; asset?: string; decimals?: number; note: string }>;
+  feeBps: number;
+  chains: Array<{ chain: string; assets: BridgeAsset[] }>;
+}
+
+export interface DepositRequest {
+  /** A 64-hex implicit account (need not exist yet: the deposit creates it) or an existing named account. */
+  account: string;
+  /** Chain id from bridgeAssets(): "eth", "base", "arb", "bsc", "sol", "tron", "ton", "btc", ... */
+  chain: string;
+  /** The symbol on that chain ("USDC") or a NEAR Intents asset id. */
+  asset: string;
+  /** What the user sends, in the asset's smallest units (NearTrade.units(20, 6) for 20 USDC). */
+  amount: string;
+  /** An address on that chain that gets the deposit back if it cannot be delivered. */
+  refundTo: string;
+  /** "near" (default): arrives as native NEAR and pays the account's gas. "usdc": arrives as USDC. */
+  receive?: "near" | "usdc";
+  slippageBps?: number;
+}
+
+export interface Deposit {
+  depositAddress: string;
+  depositMemo?: string;
+  chain: string;
+  asset: string;
+  symbol: string;
+  decimals: number;
+  /** Send exactly this, in the asset's smallest units. */
+  amountIn: string;
+  receive: "near" | "usdc";
+  expectedOut: string;
+  minOut: string;
+  /** 24 for NEAR, 6 for USDC. */
+  outDecimals: number;
+  amountInUsd: string | null;
+  deadline: string | null;
+  etaSeconds: number | null;
+  feeBps: number;
+  accountExists: boolean;
+  warnings: string[];
+  next: string;
+}
+
+export interface WithdrawRequest {
+  account: string;
+  /** Destination chain id and asset there. */
+  chain: string;
+  asset: string;
+  /** The address on that chain. */
+  to: string;
+  /** yoctoNEAR (from "near") or USDC units (from "usdc"). */
+  amount: string;
+  from?: "near" | "usdc";
+  slippageBps?: number;
+}
+
+export interface Withdrawal {
+  depositAddress: string;
+  account: string;
+  from: "near" | "usdc";
+  amountIn: string;
+  chain: string;
+  asset: string;
+  symbol: string;
+  decimals: number;
+  to: string;
+  expectedOut: string;
+  minOut: string;
+  amountOutUsd: string | null;
+  deadline: string | null;
+  etaSeconds: number | null;
+  feeBps: number;
+  /** One transaction for the account's key to sign. */
+  transactions: PlainTransaction[];
+  next: string;
+}
+
+export interface TransferStatus {
+  depositAddress: string;
+  kind: "deposit" | "withdraw";
+  account: string;
+  status: "waiting" | "seen" | "processing" | "done" | "incomplete" | "refunded" | "failed";
+  amountOut: string | null;
+  refundReason: string | null;
+  originTxs: string[];
+  destinationTxs: string[];
+}
+
+export interface AccountSummary {
+  account: string;
+  exists: boolean;
+  implicit: boolean;
+  near: { total: string; available: string; decimals: 24; valueUsd: number | null };
+  tokens: Array<{ token: string; symbol: string | null; decimals: number | null; balance: string; priceUsd: number | null; valueUsd: number | null }>;
+  totalUsd: number;
+  /** At least 0.05 NEAR free for gas. */
+  canTrade: boolean;
+  next?: string;
+}

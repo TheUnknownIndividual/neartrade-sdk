@@ -54,3 +54,28 @@ test("signQuote signs every transaction as returned, with increasing nonces", as
     globalThis.fetch = realFetch;
   }
 });
+
+test("newAccount makes an implicit account whose id is its public key", async () => {
+  const user = await NearTrade.newAccount();
+  assert.match(user.accountId, /^[0-9a-f]{64}$/);
+  const keyPair = KeyPair.fromString(user.secretKey as Parameters<typeof KeyPair.fromString>[0]);
+  assert.equal(keyPair.getPublicKey().toString(), user.publicKey);
+  assert.equal(Buffer.from(keyPair.getPublicKey().data).toString("hex"), user.accountId);
+});
+
+test("deposit posts the request and waitForTransfer stops at a final status", async () => {
+  const seen: Array<{ url: string; body: unknown }> = [];
+  const statuses = ["waiting", "processing", "done"];
+  const fake = (async (url: unknown, init?: RequestInit) => {
+    seen.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (String(url).endsWith("/v1/deposit")) return new Response(JSON.stringify({ depositAddress: "0xabc", amountIn: "20000000" }));
+    return new Response(JSON.stringify({ depositAddress: "0xabc", status: statuses.shift() }));
+  }) as typeof fetch;
+  const nt = new NearTrade({ apiKey: "nt_live_test", fetch: fake });
+  const dep = await nt.deposit({ account: "a".repeat(64), chain: "base", asset: "USDC", amount: NearTrade.units(20, 6), refundTo: "0x1111111111111111111111111111111111111111" });
+  assert.equal(dep.depositAddress, "0xabc");
+  assert.deepEqual(seen[0]!.body, { account: "a".repeat(64), chain: "base", asset: "USDC", amount: "20000000", refundTo: "0x1111111111111111111111111111111111111111" });
+  const done = await nt.waitForTransfer("0xabc", { intervalMs: 1 });
+  assert.equal(done.status, "done");
+  assert.ok(seen.slice(1).every((call) => call.url.endsWith("/v1/transfers/0xabc")));
+});
