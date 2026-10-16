@@ -1,10 +1,13 @@
-import type { Launchpad, Me, PlainTransaction, Quote, QuoteRequest, SendResult, TokenDetail, TokenList, Token, TxStatus } from "./types.js";
+import type { Candle, Holder, Launchpad, Me, PlainTransaction, Quote, QuoteRequest, SendResult, TokenDetail, TokenList, Token, Trade, TxStatus } from "./types.js";
 
 export * from "./types.js";
 
 export interface NearTradeOptions {
-  /** Your key from https://dev.neartrade.lol. Keep it on your server: a key inside an app or a web page is public. */
-  apiKey: string;
+  /**
+   * Your key from https://dev.neartrade.lol. Optional to try the API: reads and quotes answer without one (20 requests a
+   * minute, 300 a day per address); sending needs one. Keep it on your server: a key inside an app or a page is public.
+   */
+  apiKey?: string;
   /** Default https://dev.neartrade.lol. */
   baseUrl?: string;
   /** Per-request time limit in ms. Default 15000. */
@@ -47,14 +50,13 @@ function decimalToUnits(amount: number | string, decimals: number): string {
 }
 
 export class NearTrade {
-  private readonly key: string;
+  private readonly key: string | null;
   private readonly base: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(options: NearTradeOptions) {
-    if (!options?.apiKey) throw new Error("apiKey is required: make one at https://dev.neartrade.lol");
-    this.key = options.apiKey;
+  constructor(options: NearTradeOptions = {}) {
+    this.key = options?.apiKey?.trim() || null;
     this.base = (options.baseUrl ?? DEFAULT_URL).replace(/\/+$/, "");
     this.timeoutMs = options.timeoutMs ?? 15_000;
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -73,7 +75,7 @@ export class NearTrade {
     try {
       const response = await this.fetchImpl(`${this.base}${path}`, {
         method,
-        headers: { "x-api-key": this.key, accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        headers: { ...(this.key ? { "x-api-key": this.key } : {}), accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });
@@ -203,6 +205,36 @@ export class NearTrade {
 
   /** The launchpads neartrade trades on. */
   launchpads(): Promise<{ launchpads: Launchpad[] }> { return this.call("GET", "/v1/launchpads"); }
+
+  /* ---------------------------------------------------------------- market data */
+
+  /** The token's latest trades, newest first. */
+  trades(token: string, options: { limit?: number } = {}): Promise<{ token: string; trades: Trade[] }> {
+    return this.call("GET", `/v1/tokens/${encodeURIComponent(token)}/trades${options.limit ? `?limit=${options.limit}` : ""}`);
+  }
+
+  /** The holder count and the biggest holders, each with its kind (wallet, pool, bridge, contract, burn...). */
+  holders(token: string, options: { limit?: number } = {}): Promise<{ token: string; holders: number | null; updatedAt: string | null; top: Holder[] }> {
+    return this.call("GET", `/v1/tokens/${encodeURIComponent(token)}/holders${options.limit ? `?limit=${options.limit}` : ""}`);
+  }
+
+  /** OHLCV candles in NEAR from on-chain trades. */
+  candles(token: string, options: { interval?: "1m" | "5m" | "15m" | "1h" | "4h" | "1d"; limit?: number } = {}): Promise<{ token: string; interval: string; unit: string; candles: Candle[] }> {
+    const q = new URLSearchParams();
+    if (options.interval) q.set("interval", options.interval);
+    if (options.limit) q.set("limit", String(options.limit));
+    return this.call("GET", `/v1/tokens/${encodeURIComponent(token)}/candles${q.size ? `?${q}` : ""}`);
+  }
+
+  /** The token's biggest traders by volume. */
+  topTraders(token: string, options: { limit?: number } = {}): Promise<{ token: string; totals: unknown; traders: unknown[] }> {
+    return this.call("GET", `/v1/tokens/${encodeURIComponent(token)}/top-traders${options.limit ? `?limit=${options.limit}` : ""}`);
+  }
+
+  /** A wallet's positions and realised P&L. */
+  walletPnl(account: string): Promise<{ account: string; positions: unknown[]; totals: unknown }> {
+    return this.call("GET", `/v1/wallets/${encodeURIComponent(account)}/pnl`);
+  }
 }
 
 async function rpc<T>(url: string, method: string, params: unknown): Promise<T> {

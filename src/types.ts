@@ -127,3 +127,7 @@ export interface TokenList {
 }
 
 export interface Launchpad { id: string; tokens: number; launched24h: number; launched7d: number; graduated: number; volume24hUsd: number }
+
+export interface Trade { trader: string; side: "buy" | "sell" | string; tokenAmount: string; nearAmount: string; tx: string; at: string | null; pool: string | null }
+export interface Holder { account: string; balance: string; kind: string }
+export interface Candle { time: string; open: number; high: number; low: number; close: number; volume: number }
