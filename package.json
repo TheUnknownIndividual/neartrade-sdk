@@ -1,5 +1,5 @@
 {
-  "name": "@neartrade/sdk",
+  "name": "@neartradelol/sdk",
   "version": "0.2.0",
   "description": "TypeScript SDK for the neartrade developer API: quotes, swaps and token discovery for every NEAR launchpad and Rhea pool, paid in NEAR or USDC.",
   "license": "MIT",

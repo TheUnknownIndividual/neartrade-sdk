@@ -1,4 +1,4 @@
-# @neartrade/sdk
+# @neartradelol/sdk
 
 Every NEAR launchpad and Rhea pool through one integration. Quote a buy or a sell, let your user's wallet sign it, and send it. neartrade keeps the launchpad and DEX connections working; your users stay in your app.
 
@@ -9,7 +9,7 @@ Every NEAR launchpad and Rhea pool through one integration. Quote a buy or a sel
 - **Token discovery (partner keys):** trending, new and graduating tokens, search, each token's market and safety facts (Rug %, bundle and developer checks), prices and launchpads.
 
 ```sh
-npm i @neartrade/sdk near-api-js   # near-api-js only for signing with a key on your server
+npm i @neartradelol/sdk near-api-js   # near-api-js only for signing with a key on your server
 ```
 
 Get a key at https://dev.neartrade.lol (it takes a few seconds). For partner access (discovery and a fee share), write to https://help.neartrade.lol.
@@ -17,7 +17,7 @@ Get a key at https://dev.neartrade.lol (it takes a few seconds). For partner acc
 ## Buy in a browser or mobile wallet
 
 ```ts
-import { NearTrade } from "@neartrade/sdk";
+import { NearTrade } from "@neartradelol/sdk";
 
 // On your server: the key stays there.
 const nt = new NearTrade({ apiKey: process.env.NEARTRADE_KEY! });
