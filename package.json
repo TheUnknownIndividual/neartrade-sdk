@@ -21,7 +21,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "engines": {
@@ -58,5 +60,17 @@
     "sdk",
     "trading"
   ],
-  "homepage": "https://dev.neartrade.lol"
+  "homepage": "https://dev.neartrade.lol",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheUnknownIndividual/neartrade-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TheUnknownIndividual/neartrade-sdk/issues"
+  },
+  "author": "neartrade (https://www.neartrade.lol)",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
