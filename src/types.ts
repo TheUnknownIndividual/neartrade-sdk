@@ -9,7 +9,7 @@ export interface PlainTransaction {
 }
 
 export type Side = "buy" | "sell";
-export type QuoteAsset = "near" | "usdc";
+export type QuoteAsset = "near" | "usdc" | "usdt";
 
 export interface QuoteRequest {
   /** The NEAR account that will sign. */
@@ -19,12 +19,12 @@ export interface QuoteRequest {
   side: Side;
   /**
    * What goes in, as an integer string: yoctoNEAR for a buy (NearTrade.near(1)), the token's smallest unit for a sell,
-   * or USDC's 6-decimal units for a buy with quoteAsset "usdc" (NearTrade.usdc(25)).
+   * or the stablecoin's 6-decimal units for a buy with quoteAsset "usdc" or "usdt" (NearTrade.usdc(25), NearTrade.usdt(25)).
    */
   amount: string;
   /** 10 to 5000. Default 300 (3%). */
   slippageBps?: number;
-  /** "near" (default) or "usdc": pay a buy in USDC, or take a sell's proceeds in USDC. */
+  /** "near" (default), "usdc" or "usdt": pay a buy in that stablecoin, or take a sell's proceeds in it. */
   quoteAsset?: QuoteAsset;
 }
 
@@ -37,11 +37,11 @@ export interface Quote {
   venue: string;
   quoteAsset: QuoteAsset;
   amountIn: string;
-  /** After neartrade's fee. In USDC units for a usdc sell, yoctoNEAR for a sell, the token's units for a buy. */
+  /** After neartrade's fee. In the stablecoin's units for a usdc/usdt sell, yoctoNEAR for a sell, the token's units for a buy. */
   expectedOut: string;
   minOut: string;
   tokenDecimals: number | null;
-  conversion?: { venue: string; from: string; to: string; usdcDecimals: number; nearIn: string | null; nearOut: { expected: string; min: string } | null; fee: string };
+  conversion?: { venue: string; from: string; to: string; decimals: number; /** USDC quotes only (older name of decimals). */ usdcDecimals?: number; nearIn: string | null; nearOut: { expected: string; min: string } | null; fee: string };
   fee: { yoctoNear: string; bps: number | null; partner: { account: string; shareBps: number; yoctoNear: string | null } | null };
   transactions: PlainTransaction[];
 }

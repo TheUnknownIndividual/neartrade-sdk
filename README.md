@@ -3,7 +3,7 @@
 Every NEAR launchpad and Rhea pool through one integration. Quote a buy or a sell, let your user's wallet sign it, and send it. neartrade keeps the launchpad and DEX connections working; your users stay in your app.
 
 - **Every venue neartrade trades on:** Rhea (classic and DCL pools) and the launchpads' bonding curves: nearly.trade, Meme Cooking, gra.fun, AIdols, Nira, Shards, Nearrr, Umbra, plus Intear's DEX and routr. When a token graduates from its curve, the same call routes to its pool.
-- **NEAR or USDC:** pay for a buy in USDC, or take a sell's proceeds in USDC (`quoteAsset: "usdc"`). The conversion is part of the same quote and carries no fee of its own.
+- **NEAR, USDC or USDT:** pay for a buy in USDC or USDT, or take a sell's proceeds in either (`quoteAsset: "usdc"` or `"usdt"`). The conversion is part of the same quote and carries no fee of its own.
 - **Users from any chain:** a user with nothing on NEAR gets an account in one call (`NearTrade.newAccount()`, no transaction) and funds it from Ethereum, Base, Arbitrum, BNB Chain, Solana, Tron, TON, Bitcoin and more through NEAR Intents. The first deposit arrives as NEAR, so it pays its own gas. Cash out goes back the same way.
 - **Non-custodial:** neartrade never holds keys or funds. You get transactions; your user's key signs them.
 - **Free to use:** no subscription. neartrade takes 1% of each swap, already inside the transactions a quote returns. Partner keys are paid an agreed share of that fee on every swap they route, on chain, in the same transaction.
@@ -74,15 +74,15 @@ await wallet.signAndSendTransactions({ transactions: NearTrade.walletTransaction
 
 Show the user `quote.expectedOut` and `quote.minOut` (the token's smallest units, `quote.tokenDecimals`) before they sign. A quote lives 90 seconds.
 
-## Pay with USDC, get USDC back
+## Pay with USDC or USDT, get it back
 
 ```ts
 const buy = await nt.quote({ account, token, side: "buy", amount: NearTrade.usdc(25), quoteAsset: "usdc" });
 const sell = await nt.quote({ account, token, side: "sell", amount: NearTrade.units(1000, 18), quoteAsset: "usdc" });
-// sell.expectedOut and sell.minOut are USDC (6 decimals).
+// sell.expectedOut and sell.minOut are USDC (6 decimals). quoteAsset: "usdt" with NearTrade.usdt(25) works the same way.
 ```
 
-A USDC quote has a `conversion` block and a few more transactions (a storage registration when the account needs one, the USDC swap, and on a buy the unwrap of the NEAR it delivers). Sign and send them all, in order.
+A USDC or USDT quote has a `conversion` block and a few more transactions (a storage registration when the account needs one, the stablecoin swap, and on a buy the unwrap of the NEAR it delivers). Sign and send them all, in order.
 
 ## Sign on your server
 

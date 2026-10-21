@@ -70,6 +70,8 @@ export class NearTrade {
   static near(amount: number | string): string { return decimalToUnits(amount, 24); }
   /** USDC to its 6-decimal units: NearTrade.usdc(25) === "25000000". */
   static usdc(amount: number | string): string { return decimalToUnits(amount, 6); }
+  /** USDT to its 6-decimal units: NearTrade.usdt(25) === "25000000". */
+  static usdt(amount: number | string): string { return decimalToUnits(amount, 6); }
   /** Any token's whole amount to its smallest units, given its decimals. */
   static units(amount: number | string, decimals: number): string { return decimalToUnits(amount, decimals); }
 

@@ -1,6 +1,6 @@
 {
   "name": "@neartradelol/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript SDK for the neartrade developer API: onboard users from any chain onto NEAR (NEAR Intents), then quote and swap on every NEAR launchpad and Rhea pool, paid in NEAR or USDC.",
   "license": "MIT",
   "type": "module",
